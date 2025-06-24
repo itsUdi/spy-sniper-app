@@ -16,57 +16,71 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- API KEY INPUT ---
+# --- WEBULL CONFIG ---
+WEBULL_TOKEN = "dc_us_tech1.1979f0e3ec9-a6386e8d49fd4cfa9477c5276ad7d059"
+TOKEN_EXPIRY = 24 * 60 * 60  # 24 hours in seconds
+
+def get_webull_token_expiry():
+    return timedelta(seconds=TOKEN_EXPIRY)
+
+# --- STREAMLIT UI ---
 st.title("🔫 SPY Options Sniper")
-POLYGON_API_KEY = st.text_input("Paste your Polygon.io API Key:", type="password")
+st.success(f"⏳ Token valid for: {str(get_webull_token_expiry())}")
 
-# --- TOKEN TIMER ---
-if POLYGON_API_KEY:
-    token_start_time = datetime.datetime.now()
-    token_expiry_time = token_start_time + timedelta(days=30)
-    st.info(f"⏳ API Key Valid Until: {str(token_expiry_time.date())}")
-
-    # --- FETCH LIVE SPY PRICE ---
-    def get_spy_price_polygon(api_key):
-        url = f"https://api.polygon.io/v1/last/stocks/SPY?apiKey={api_key}"
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
-            price = data['last']['price']
-            return round(price, 2)
-        except Exception as e:
-            return f"Error fetching price: {e}"
-
-    # --- CALCULATE RSI ---
-    def calculate_rsi(api_key, symbol="SPY", window=14):
-        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2024-01-01/{datetime.datetime.now().date()}?adjusted=true&sort=desc&limit=100&apiKey={api_key}"
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            df = pd.DataFrame(response.json()['results'])
-            df['c'] = df['c'].astype(float)
-            df = df[::-1]
-            delta = df['c'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            return round(rsi.iloc[-1], 2)
-        except Exception as e:
-            return f"Error fetching RSI: {e}"
-
-    spy_price = get_spy_price_polygon(POLYGON_API_KEY)
-    rsi = calculate_rsi(POLYGON_API_KEY)
-
+# --- FETCH LIVE SPY PRICE FROM WEBULL ---
+def get_spy_price_webull(token):
+    url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerId=913256135"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
     try:
-        st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
-        st.markdown(f"**📊 RSI (14d)**: {rsi}")
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        return round(float(data['lastSalePrice']), 2)
     except Exception as e:
-        st.markdown(f"**Live Data Error**: {str(e)}")
+        return f"Error: {e}"
 
-# --- MOCKED DATA PREVIEW ---
-if POLYGON_API_KEY and isinstance(spy_price, (float, int, str)) and not str(spy_price).startswith("Error"):
+# --- CALCULATE RSI FROM POLYGON (OPTIONAL BACKUP FOR HISTORICAL) ---
+POLYGON_API_KEY = st.text_input("Paste your Polygon.io API Key (for RSI only):", type="password")
+
+def calculate_rsi(api_key, symbol="SPY", window=14):
+    url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2024-01-01/{datetime.datetime.now().date()}?adjusted=true&sort=desc&limit=100&apiKey={api_key}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        df = pd.DataFrame(response.json()['results'])
+        df['c'] = df['c'].astype(float)
+        df = df[::-1]
+        delta = df['c'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return round(rsi.iloc[-1], 2)
+    except Exception as e:
+        return f"Error fetching RSI: {e}"
+
+# --- DISPLAY PRICES ---
+spy_price = get_spy_price_webull(WEBULL_TOKEN)
+if POLYGON_API_KEY:
+    rsi = calculate_rsi(POLYGON_API_KEY)
+else:
+    rsi = "N/A (No API Key)"
+
+if isinstance(spy_price, (float, int)):
+    st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
+else:
+    st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
+
+if isinstance(rsi, (float, int)):
+    st.markdown(f"**📊 RSI (14d)**: {rsi}")
+else:
+    st.markdown(f"**📊 RSI (14d)**: {rsi}")
+
+# --- MOCKED OPTION PICK ---
+if isinstance(spy_price, (float, int)):
     st.subheader("🔍 Today's Pick")
     st.markdown("---")
     st.markdown("**📈 SPY Trend**: Bullish (based on RSI & Momentum)")
@@ -78,4 +92,4 @@ if POLYGON_API_KEY and isinstance(spy_price, (float, int, str)) and not str(spy_
     st.markdown(f"**🧠 Reason**: RSI {rsi}, Uptrend, Strong support at 599.75, High volume")
     st.success("This contract has the highest probability of hitting your 10% daily goal today.")
 else:
-    st.warning("🔐 Please paste your Polygon.io API key to activate live scanning.")
+    st.warning("⚠️ Live data not available. Please check your Webull token.")
