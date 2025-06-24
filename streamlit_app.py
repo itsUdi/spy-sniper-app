@@ -29,13 +29,14 @@ if POLYGON_API_KEY:
 
     # --- FETCH LIVE SPY PRICE ---
     def get_spy_price_polygon(api_key):
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
-        url = f"https://api.polygon.io/v2/aggs/ticker/SPY/prev?adjusted=true&apiKey={api_key}"
+        url = f"https://api.polygon.io/v2/last/nbbo/SPY?apiKey={api_key}"
         try:
             response = requests.get(url)
             response.raise_for_status()
             data = response.json()
-            return round(data['results'][0]['c'], 2)
+            ask = data['results']['ask']['price']
+            bid = data['results']['bid']['price']
+            return round((ask + bid) / 2, 2)
         except Exception as e:
             return f"Error fetching price: {e}"
 
@@ -80,4 +81,4 @@ if POLYGON_API_KEY and isinstance(spy_price, (float, int, str)) and not str(spy_
     st.success("This contract has the highest probability of hitting your 10% daily goal today.")
 else:
     st.warning("🔐 Please paste your Polygon.io API key to activate live scanning.")
-
+    
