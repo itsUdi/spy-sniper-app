@@ -31,33 +31,26 @@ if TOKEN:
         headers = {
             "AccessToken": token,
             "accept-language": "en-US",
-            "sec-ch-ua": '"Chromium";v="112", "Google Chrome";v="112", ";Not=A-Brand";v="99"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": "Windows",
             "origin": "https://app.webull.com",
             "referer": "https://app.webull.com/",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
-        url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerIds=913256135"
+        # Alternate endpoint – market snapshot
+        url = "https://quotes-gw.webullfintech.com/api/quote/tickerRealTimes?tickerIds=913256135"
         try:
             response = requests.get(url, headers=headers)
             response.encoding = 'utf-8'
             response.raise_for_status()
             data = response.json()
-            return data['data'][0]['lastDone']
-        except requests.exceptions.HTTPError as http_err:
-            return f"HTTP Error {http_err.response.status_code}: {http_err.response.text}"
-        except Exception as e:
-            return f"Error: {str(e)}"
+            return data['data'][0]['last']
+        except requests.exceptions.RequestException as e:
+            return f"$Error: {e}"
 
     spy_price = get_spy_price(TOKEN)
-    try:
-        st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
-    except Exception as e:
-        st.markdown(f"**Live SPY Price**: Error displaying price - {str(e)}")
+    st.markdown(f"**📉 Live SPY Price**: {spy_price}")
 
 # --- MOCKED DATA PREVIEW ---
-if TOKEN:
+if TOKEN and isinstance(spy_price, (float, int, str)) and not str(spy_price).startswith("$Error"):
     st.subheader("🔍 Today's Pick")
     st.markdown("---")
     st.markdown("**📈 SPY Trend**: Bullish (based on RSI & Momentum)")
@@ -70,4 +63,3 @@ if TOKEN:
     st.success("This contract has the highest probability of hitting your 10% daily goal today.")
 else:
     st.warning("🔐 Please paste your Webull token to activate live scanning.")
-
