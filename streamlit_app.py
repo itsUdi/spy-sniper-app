@@ -41,6 +41,7 @@ if TOKEN:
         url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerIds=913256135"
         try:
             response = requests.get(url, headers=headers)
+            response.encoding = 'utf-8'
             response.raise_for_status()
             data = response.json()
             return data['data'][0]['lastDone']
@@ -50,7 +51,10 @@ if TOKEN:
             return f"Error: {str(e)}"
 
     spy_price = get_spy_price(TOKEN)
-    st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
+    try:
+        st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
+    except Exception as e:
+        st.markdown(f"**Live SPY Price**: Error displaying price - {str(e)}")
 
 # --- MOCKED DATA PREVIEW ---
 if TOKEN:
@@ -66,4 +70,4 @@ if TOKEN:
     st.success("This contract has the highest probability of hitting your 10% daily goal today.")
 else:
     st.warning("🔐 Please paste your Webull token to activate live scanning.")
-    
+
