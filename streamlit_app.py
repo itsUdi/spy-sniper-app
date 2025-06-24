@@ -28,7 +28,15 @@ if TOKEN:
 
     # --- FETCH LIVE SPY PRICE ---
     def get_spy_price(token):
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {
+            "Authorization": token,
+            "accept": "*/*",
+            "sec-fetch-site": "same-site",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-dest": "empty",
+            "origin": "https://app.webull.com",
+            "referer": "https://app.webull.com/"
+        }
         url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerIds=913256135"
         try:
             response = requests.get(url, headers=headers)
