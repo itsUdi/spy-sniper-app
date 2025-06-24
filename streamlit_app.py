@@ -30,12 +30,10 @@ if TOKEN:
     def get_spy_price(token):
         headers = {
             "Authorization": token,
-            "accept": "*/*",
-            "sec-fetch-site": "same-site",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-dest": "empty",
-            "origin": "https://app.webull.com",
-            "referer": "https://app.webull.com/"
+            "Accept": "application/json",
+            "Origin": "https://app.webull.com",
+            "Referer": "https://app.webull.com/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
         url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerIds=913256135"
         try:
@@ -43,6 +41,8 @@ if TOKEN:
             response.raise_for_status()
             data = response.json()
             return data['data'][0]['lastDone']
+        except requests.exceptions.HTTPError as http_err:
+            return f"HTTP Error: {http_err.response.status_code} - {http_err.response.reason}"
         except Exception as e:
             return f"Error: {e}"
 
