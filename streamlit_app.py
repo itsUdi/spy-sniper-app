@@ -29,12 +29,12 @@ if TOKEN:
     # --- FETCH LIVE SPY PRICE ---
     def get_spy_price(token):
         headers = {"Authorization": f"Bearer {token}"}
-        url = "https://api.webull.com/api/quote/option/real-time/spy"
+        url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerIds=913256135"
         try:
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
-            return data.get("lastPrice", "Unavailable")
+            return data['data'][0]['lastDone']
         except Exception as e:
             return f"Error: {e}"
 
