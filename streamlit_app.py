@@ -29,11 +29,14 @@ if TOKEN:
     # --- FETCH LIVE SPY PRICE ---
     def get_spy_price(token):
         headers = {
-            "Authorization": token,
-            "Accept": "application/json",
-            "Origin": "https://app.webull.com",
-            "Referer": "https://app.webull.com/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "AccessToken": token,
+            "accept-language": "en-US",
+            "sec-ch-ua": '"Chromium";v="112", "Google Chrome";v="112", ";Not=A-Brand";v="99"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "Windows",
+            "origin": "https://app.webull.com",
+            "referer": "https://app.webull.com/",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
         }
         url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerIds=913256135"
         try:
@@ -42,9 +45,9 @@ if TOKEN:
             data = response.json()
             return data['data'][0]['lastDone']
         except requests.exceptions.HTTPError as http_err:
-            return f"HTTP Error: {http_err.response.status_code} - {http_err.response.reason}"
+            return f"HTTP Error {http_err.response.status_code}: {http_err.response.text}"
         except Exception as e:
-            return f"Error: {e}"
+            return f"Error: {str(e)}"
 
     spy_price = get_spy_price(TOKEN)
     st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
@@ -61,6 +64,6 @@ if TOKEN:
     st.markdown("**📊 Volume**: 40,120 | **OI**: 120,560")
     st.markdown("**🧠 Reason**: RSI 55, Uptrend, Strong support at 599.75, High volume")
     st.success("This contract has the highest probability of hitting your 10% daily goal today.")
-
 else:
     st.warning("🔐 Please paste your Webull token to activate live scanning.")
+    
