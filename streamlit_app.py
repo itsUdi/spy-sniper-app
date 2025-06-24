@@ -95,3 +95,4 @@ if best_option is not None and best_option['score'] > 0:
     st.success("This contract has the highest potential to hit your 10% target today.")
 else:
     st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
+    
