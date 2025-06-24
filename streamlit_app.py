@@ -1,12 +1,10 @@
-import requests
-import datetime
+import yfinance as yf
 import pandas as pd
-from typing import List, Dict
 import streamlit as st
-from datetime import timedelta
+from datetime import datetime
 
 # --- CONFIG ---
-st.set_page_config(page_title="SPY Sniper", layout="centered", initial_sidebar_state="auto")
+st.set_page_config(page_title="SPY Sniper", layout="centered")
 st.markdown("""
     <style>
         body { background-color: #0e1117; color: white; }
@@ -16,80 +14,84 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- WEBULL CONFIG ---
-WEBULL_TOKEN = "dc_us_tech1.1979f0e3ec9-a6386e8d49fd4cfa9477c5276ad7d059"
-TOKEN_EXPIRY = 24 * 60 * 60  # 24 hours in seconds
-
-def get_webull_token_expiry():
-    return timedelta(seconds=TOKEN_EXPIRY)
-
-# --- STREAMLIT UI ---
 st.title("🔫 SPY Options Sniper")
-st.success(f"⏳ Token valid for: {str(get_webull_token_expiry())}")
+st.info("📡 Using Yahoo Finance - Free 15-min delayed data (no token needed)")
 
-# --- FETCH LIVE SPY PRICE FROM WEBULL ---
-def get_spy_price_webull(token):
-    url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerId=913256135"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json"
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        return round(float(data['lastSalePrice']), 2)
-    except Exception as e:
-        return f"Error: {e}"
+# --- FETCH SPY PRICE ---
+def get_spy_price():
+    spy = yf.Ticker("SPY")
+    hist = spy.history(period="1d", interval="1m")
+    return round(hist['Close'].iloc[-1], 2)
 
-# --- CALCULATE RSI FROM POLYGON (OPTIONAL BACKUP FOR HISTORICAL) ---
-POLYGON_API_KEY = st.text_input("Paste your Polygon.io API Key (for RSI only):", type="password")
+# --- CALCULATE RSI ---
+def calculate_rsi(symbol="SPY", window=14):
+    spy = yf.Ticker(symbol)
+    hist = spy.history(period="2mo")
+    delta = hist['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return round(rsi.iloc[-1], 2)
 
-def calculate_rsi(api_key, symbol="SPY", window=14):
-    url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2024-01-01/{datetime.datetime.now().date()}?adjusted=true&sort=desc&limit=100&apiKey={api_key}"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        df = pd.DataFrame(response.json()['results'])
-        df['c'] = df['c'].astype(float)
-        df = df[::-1]
-        delta = df['c'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return round(rsi.iloc[-1], 2)
-    except Exception as e:
-        return f"Error fetching RSI: {e}"
+# --- FETCH OPTION CHAIN ---
+def get_option_chain(symbol="SPY"):
+    ticker = yf.Ticker(symbol)
+    expirations = ticker.options
+    contracts = []
+    for exp in expirations[:2]:  # check nearest 2 expirations
+        opt_chain = ticker.option_chain(exp)
+        calls = opt_chain.calls.copy()
+        puts = opt_chain.puts.copy()
+        calls['type'] = 'Call'
+        puts['type'] = 'Put'
+        combined = pd.concat([calls, puts])
+        combined['expirationDate'] = exp
+        contracts.append(combined)
+    all_contracts = pd.concat(contracts)
+    return all_contracts
 
-# --- DISPLAY PRICES ---
-spy_price = get_spy_price_webull(WEBULL_TOKEN)
-if POLYGON_API_KEY:
-    rsi = calculate_rsi(POLYGON_API_KEY)
+# --- EVALUATE OPTIONS ---
+def score_option(row, rsi, current_price):
+    score = 0
+    if pd.isna(row['impliedVolatility']) or row['volume'] == 0:
+        return -1  # disqualify options with no volume or IV
+    
+    # Use IV as a proxy for delta & movement
+    score += row['volume'] / 1000
+    score += row['openInterest'] / 1000
+    score += 1 / row['impliedVolatility'] * 100
+    
+    if row['type'] == 'Call' and rsi < 70 and current_price < row['strike'] + 3:
+        score += 10  # Call bias if momentum is bullish
+    elif row['type'] == 'Put' and rsi > 30 and current_price > row['strike'] - 3:
+        score += 10  # Put bias if momentum is bearish
+    
+    return score
+
+# --- DISPLAY DATA ---
+price = get_spy_price()
+rsi = calculate_rsi()
+options_df = get_option_chain()
+options_df = options_df.dropna(subset=['lastPrice'])
+
+# Score and sort
+options_df['score'] = options_df.apply(lambda row: score_option(row, rsi, price), axis=1)
+best_option = options_df.loc[options_df['score'].idxmax()] if not options_df.empty else None
+
+st.markdown(f"**📉 SPY Price**: ${price}")
+st.markdown(f"**📊 RSI (14d)**: {rsi}")
+
+st.subheader("🔍 Best Option Based on Algo")
+st.markdown("---")
+
+if best_option is not None and best_option['score'] > 0:
+    st.markdown(f"**🔹 Type**: {best_option['type']} - **Strike**: {best_option['strike']} - Exp: {best_option['expirationDate']}")
+    st.markdown(f"**💰 Last Price**: ${round(best_option['lastPrice'], 2)}")
+    st.markdown(f"**🎯 Target (10%)**: ${round(best_option['lastPrice'] * 1.10, 2)}")
+    st.markdown(f"**🛑 Stop (20%)**: ${round(best_option['lastPrice'] * 0.80, 2)}")
+    st.markdown(f"**📊 Volume**: {int(best_option['volume'])} | **OI**: {int(best_option['openInterest'])}")
+    st.markdown(f"**🧠 IV (proxy for delta)**: {round(best_option['impliedVolatility'], 4)}")
+    st.success("This contract has the highest potential to hit your 10% target today.")
 else:
-    rsi = "N/A (No API Key)"
-
-if isinstance(spy_price, (float, int)):
-    st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
-else:
-    st.markdown(f"**📉 Live SPY Price**: ${spy_price}")
-
-if isinstance(rsi, (float, int)):
-    st.markdown(f"**📊 RSI (14d)**: {rsi}")
-else:
-    st.markdown(f"**📊 RSI (14d)**: {rsi}")
-
-# --- MOCKED OPTION PICK ---
-if isinstance(spy_price, (float, int)):
-    st.subheader("🔍 Today's Pick")
-    st.markdown("---")
-    st.markdown("**📈 SPY Trend**: Bullish (based on RSI & Momentum)")
-    st.markdown("**🔹 Contract**: 600 Call - Expiring Today")
-    st.markdown("**💰 Entry Price**: $1.20")
-    st.markdown("**🎯 10% Target**: $1.32")
-    st.markdown("**🛑 20% Stop**: $0.96")
-    st.markdown("**📊 Volume**: 40,120 | **OI**: 120,560")
-    st.markdown(f"**🧠 Reason**: RSI {rsi}, Uptrend, Strong support at 599.75, High volume")
-    st.success("This contract has the highest probability of hitting your 10% daily goal today.")
-else:
-    st.warning("⚠️ Live data not available. Please check your Webull token.")
+    st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
