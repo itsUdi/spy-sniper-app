@@ -17,6 +17,17 @@ st.markdown("""
 st.title("🔫 SPY Options Sniper")
 st.info("📡 Using Yahoo Finance - Free 15-min delayed data (no token needed)")
 
+# --- MARKET HOURS CHECK ---
+def is_market_open():
+    now = datetime.now()
+    weekday = now.weekday()  # Monday = 0, Sunday = 6
+    market_open = now.replace(hour=8, minute=30, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=0, second=0, microsecond=0)
+    return weekday < 5 and market_open <= now <= market_close
+
+if not is_market_open():
+    st.warning("⚠️ The market is currently closed. Trading hours are Monday to Friday — Pre-market: 8:00-8:30am, Open: 8:30am-3:00pm, After-hours: 3:00pm-3:30pm CT. No options will be scanned right now.")
+
 # --- FETCH SPY PRICE ---
 def get_spy_price():
     try:
@@ -93,22 +104,23 @@ else:
 st.subheader("🔍 Best Option Based on Algo")
 st.markdown("---")
 
-options_df = get_option_chain()
-if not options_df.empty:
-    options_df = options_df.dropna(subset=['lastPrice'])
-    options_df['score'] = options_df.apply(lambda row: score_option(row, rsi, price), axis=1)
+if is_market_open():
+    options_df = get_option_chain()
+    if not options_df.empty:
+        options_df = options_df.dropna(subset=['lastPrice'])
+        options_df['score'] = options_df.apply(lambda row: score_option(row, rsi, price), axis=1)
 
-    valid_options = options_df[options_df['score'] > 0]
-    if not valid_options.empty:
-        best_option = valid_options.loc[valid_options['score'].idxmax()]
-        st.markdown(f"**🔹 Type**: {best_option['type']} - **Strike**: {best_option['strike']} - Exp: {best_option['expirationDate']}")
-        st.markdown(f"**💰 Last Price**: ${round(best_option['lastPrice'], 2)}")
-        st.markdown(f"**🎯 Target (10%)**: ${round(best_option['lastPrice'] * 1.10, 2)}")
-        st.markdown(f"**🛑 Stop (20%)**: ${round(best_option['lastPrice'] * 0.80, 2)}")
-        st.markdown(f"**📊 Volume**: {int(best_option['volume'])} | **OI**: {int(best_option['openInterest'])}")
-        st.markdown(f"**🧠 IV (proxy for delta)**: {round(best_option['impliedVolatility'], 4)}")
-        st.success("This contract has the highest potential to hit your 10% target today.")
+        valid_options = options_df[options_df['score'] > 0]
+        if not valid_options.empty:
+            best_option = valid_options.loc[valid_options['score'].idxmax()]
+            st.markdown(f"**🔹 Type**: {best_option['type']} - **Strike**: {best_option['strike']} - Exp: {best_option['expirationDate']}")
+            st.markdown(f"**💰 Last Price**: ${round(best_option['lastPrice'], 2)}")
+            st.markdown(f"**🎯 Target (10%)**: ${round(best_option['lastPrice'] * 1.10, 2)}")
+            st.markdown(f"**🛑 Stop (20%)**: ${round(best_option['lastPrice'] * 0.80, 2)}")
+            st.markdown(f"**📊 Volume**: {int(best_option['volume'])} | **OI**: {int(best_option['openInterest'])}")
+            st.markdown(f"**🧠 IV (proxy for delta)**: {round(best_option['impliedVolatility'], 4)}")
+            st.success("This contract has the highest potential to hit your 10% target today.")
+        else:
+            st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
     else:
-        st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
-else:
-    st.warning("⚠️ Could not load option chain. Try again later.")
+        st.warning("⚠️ Could not load option chain. Try again later.")
