@@ -23,20 +23,18 @@ POLYGON_API_KEY = st.text_input("Paste your Polygon.io API Key:", type="password
 # --- TOKEN TIMER ---
 if POLYGON_API_KEY:
     token_start_time = datetime.datetime.now()
-    token_expiry_time = token_start_time + timedelta(days=30)  # Polygon free API keys usually last longer
-    time_remaining = token_expiry_time - datetime.datetime.now()
+    token_expiry_time = token_start_time + timedelta(days=30)
     st.info(f"⏳ API Key Valid Until: {str(token_expiry_time.date())}")
 
     # --- FETCH LIVE SPY PRICE ---
     def get_spy_price_polygon(api_key):
-        url = f"https://api.polygon.io/v2/last/nbbo/SPY?apiKey={api_key}"
+        url = f"https://api.polygon.io/v1/last/stocks/SPY?apiKey={api_key}"
         try:
             response = requests.get(url)
             response.raise_for_status()
             data = response.json()
-            ask = data['results']['ask']['price']
-            bid = data['results']['bid']['price']
-            return round((ask + bid) / 2, 2)
+            price = data['last']['price']
+            return round(price, 2)
         except Exception as e:
             return f"Error fetching price: {e}"
 
@@ -81,4 +79,3 @@ if POLYGON_API_KEY and isinstance(spy_price, (float, int, str)) and not str(spy_
     st.success("This contract has the highest probability of hitting your 10% daily goal today.")
 else:
     st.warning("🔐 Please paste your Polygon.io API key to activate live scanning.")
-    
