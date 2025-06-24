@@ -97,9 +97,10 @@ options_df = get_option_chain()
 if not options_df.empty:
     options_df = options_df.dropna(subset=['lastPrice'])
     options_df['score'] = options_df.apply(lambda row: score_option(row, rsi, price), axis=1)
-    best_option = options_df.loc[options_df['score'].idxmax()] if not options_df.empty else None
 
-    if best_option is not None and best_option['score'] > 0:
+    valid_options = options_df[options_df['score'] > 0]
+    if not valid_options.empty:
+        best_option = valid_options.loc[valid_options['score'].idxmax()]
         st.markdown(f"**🔹 Type**: {best_option['type']} - **Strike**: {best_option['strike']} - Exp: {best_option['expirationDate']}")
         st.markdown(f"**💰 Last Price**: ${round(best_option['lastPrice'], 2)}")
         st.markdown(f"**🎯 Target (10%)**: ${round(best_option['lastPrice'] * 1.10, 2)}")
@@ -111,4 +112,3 @@ if not options_df.empty:
         st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
 else:
     st.warning("⚠️ Could not load option chain. Try again later.")
-    
