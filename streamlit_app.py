@@ -53,9 +53,11 @@ def get_spy_price():
     try:
         url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerId=913256135"
         response = requests.get(url, headers=headers)
+        response.raise_for_status()
         data = response.json()
-        return float(data['lastSalePrice'])
-    except:
+        return float(data.get('lastSalePrice') or data.get('close'))
+    except Exception as e:
+        st.error(f"🔴 Error fetching SPY price: {e}")
         return None
 
 # --- FETCH RSI (mocked) ---
