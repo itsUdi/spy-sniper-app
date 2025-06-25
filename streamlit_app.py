@@ -1,8 +1,8 @@
-import yfinance as yf
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 import time
+import requests
 
 # --- CONFIG ---
 st.set_page_config(page_title="SPY Sniper", layout="centered")
@@ -33,50 +33,47 @@ st_autorefresh_interval = 60  # seconds
 countdown = st.empty()
 start_time = time.time()
 
-# --- FETCH SPY PRICE ---
+# --- TOKEN CACHING ---
+if "webull_token" not in st.session_state or "token_timestamp" not in st.session_state or (datetime.now() - st.session_state.token_timestamp).total_seconds() > 86400:
+    st.session_state.webull_token = st.text_input("Paste your Webull token:", type="password")
+    if st.session_state.webull_token:
+        st.session_state.token_timestamp = datetime.now()
+else:
+    st.success("✅ Token valid for 1 day.")
+
+headers = {
+    "Access_token": st.session_state.webull_token,
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0"
+}
+
+# --- FETCH SPY PRICE FROM WEBULL ---
 def get_spy_price():
     try:
-        spy = yf.Ticker("SPY")
-        hist = spy.history(period="1d", interval="1m")
-        last_ts = hist.index[-1].to_pydatetime()
-        last_price = round(hist['Close'].iloc[-1], 2)
-        return last_price, last_ts
-    except:
-        return None, None
-
-# --- CALCULATE RSI ---
-def calculate_rsi(symbol="SPY", window=14):
-    try:
-        spy = yf.Ticker(symbol)
-        hist = spy.history(period="2mo")
-        delta = hist['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return round(rsi.iloc[-1], 2)
+        url = "https://quotes-gw.webullfintech.com/api/quote/realTimeQuote?tickerId=913256135"
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        return float(data['lastSalePrice'])
     except:
         return None
 
-# --- FETCH OPTION CHAIN ---
-def get_option_chain(symbol="SPY"):
-    try:
-        ticker = yf.Ticker(symbol)
-        expirations = ticker.options
-        contracts = []
-        for exp in expirations[:2]:
-            opt_chain = ticker.option_chain(exp)
-            calls = opt_chain.calls.copy()
-            puts = opt_chain.puts.copy()
-            calls['type'] = 'Call'
-            puts['type'] = 'Put'
-            combined = pd.concat([calls, puts])
-            combined['expirationDate'] = exp
-            contracts.append(combined)
-        all_contracts = pd.concat(contracts)
-        return all_contracts
-    except:
-        return pd.DataFrame()
+# --- FETCH RSI (mocked) ---
+def calculate_rsi():
+    return 62.5  # mock until RSI from Webull or other source added
+
+# --- FETCH OPTIONS FROM WEBULL (mocked structure) ---
+def get_option_chain():
+    # Mock return for example until full Webull options logic implemented
+    return pd.DataFrame({
+        'type': ['Call', 'Put'],
+        'strike': [605, 608],
+        'lastPrice': [1.2, 1.1],
+        'volume': [40000, 35000],
+        'openInterest': [120000, 110000],
+        'impliedVolatility': [0.23, 0.27],
+        'expirationDate': ['2025-06-24', '2025-06-24']
+    })
 
 # --- EVALUATE OPTIONS ---
 def score_option(row, rsi, current_price):
@@ -95,17 +92,15 @@ def score_option(row, rsi, current_price):
     return score
 
 # --- DISPLAY DATA ---
-price, last_ts = get_spy_price()
+price = get_spy_price()
 rsi = calculate_rsi()
 
-if price is not None and last_ts is not None:
-    next_refresh = last_ts + timedelta(minutes=(15 - last_ts.minute % 15))
-    st.markdown(f"**📉 SPY Price**: ${price} (Last updated: {last_ts.strftime('%I:%M %p')})")
-    st.markdown(f"🕒 Next expected data refresh: {next_refresh.strftime('%I:%M %p')} CT")
+if price:
+    st.markdown(f"**📉 SPY Price**: ${price}")
 else:
     st.error("Failed to retrieve SPY price.")
 
-if rsi is not None:
+if rsi:
     st.markdown(f"**📊 RSI (14d)**: {rsi}")
 else:
     st.error("Failed to calculate RSI.")
@@ -142,4 +137,3 @@ while True:
     time.sleep(1)
     if remaining == 1:
         st.experimental_rerun()
-
