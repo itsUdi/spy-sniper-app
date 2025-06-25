@@ -1,7 +1,8 @@
 import yfinance as yf
 import pandas as pd
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 
 # --- CONFIG ---
 st.set_page_config(page_title="SPY Sniper", layout="centered")
@@ -15,7 +16,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🔫 SPY Options Sniper")
-st.info("📡 Using Yahoo Finance - Free 15-min delayed data (no token needed)")
 
 # --- MARKET HOURS CHECK ---
 def is_market_open():
@@ -27,6 +27,11 @@ def is_market_open():
 
 if not is_market_open():
     st.warning("⚠️ The market is currently closed. Trading hours are Monday to Friday — Pre-market: 8:00-8:30am, Open: 8:30am-3:00pm, After-hours: 3:00pm-3:30pm CT. No options will be scanned right now.")
+
+# --- AUTO REFRESH ---
+st_autorefresh_interval = 60  # seconds
+countdown = st.empty()
+start_time = time.time()
 
 # --- FETCH SPY PRICE ---
 def get_spy_price():
@@ -124,3 +129,13 @@ if is_market_open():
             st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
     else:
         st.warning("⚠️ Could not load option chain. Try again later.")
+
+# --- REFRESH COUNTDOWN ---
+while True:
+    elapsed = int(time.time() - start_time)
+    remaining = st_autorefresh_interval - (elapsed % st_autorefresh_interval)
+    countdown.markdown(f"⏳ Auto-refresh in: **{remaining} seconds**")
+    time.sleep(1)
+    if remaining == 1:
+        st.experimental_rerun()
+
