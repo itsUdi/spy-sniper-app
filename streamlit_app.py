@@ -53,7 +53,7 @@ headers = {
     "osv": "i9zh",
     "platform": "web",
     "referer": "https://app.webull.com/",
-    "reqid": "test_req_id_001",
+    "reqid": "7a7spxe0ql5idtb9uinv39i22mndr_05",
     "sec-ch-ua": '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
