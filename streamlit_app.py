@@ -38,9 +38,11 @@ def get_spy_price():
     try:
         spy = yf.Ticker("SPY")
         hist = spy.history(period="1d", interval="1m")
-        return round(hist['Close'].iloc[-1], 2)
+        last_ts = hist.index[-1].to_pydatetime()
+        last_price = round(hist['Close'].iloc[-1], 2)
+        return last_price, last_ts
     except:
-        return None
+        return None, None
 
 # --- CALCULATE RSI ---
 def calculate_rsi(symbol="SPY", window=14):
@@ -93,11 +95,13 @@ def score_option(row, rsi, current_price):
     return score
 
 # --- DISPLAY DATA ---
-price = get_spy_price()
+price, last_ts = get_spy_price()
 rsi = calculate_rsi()
 
-if price is not None:
-    st.markdown(f"**📉 SPY Price**: ${price}")
+if price is not None and last_ts is not None:
+    next_refresh = last_ts + timedelta(minutes=(15 - last_ts.minute % 15))
+    st.markdown(f"**📉 SPY Price**: ${price} (Last updated: {last_ts.strftime('%I:%M %p')})")
+    st.markdown(f"🕒 Next expected data refresh: {next_refresh.strftime('%I:%M %p')} CT")
 else:
     st.error("Failed to retrieve SPY price.")
 
