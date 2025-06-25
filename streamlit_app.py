@@ -13,6 +13,12 @@ st.markdown("""
         .stApp { background-color: #0e1117; }
         .stButton>button { background-color: #1f222a; color: white; border-radius: 10px; }
         .css-1d391kg { background-color: #1f222a; }
+        .logout-button {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -35,39 +41,42 @@ countdown = st.empty()
 start_time = time.time()
 
 # --- LOGIN ---
-if "webull_session" not in st.session_state:
-    wb = paper_webull()
-    email = st.text_input("Webull Email")
-    password = st.text_input("Webull Password", type="password")
+VALID_EMAIL = "urielcontact2@gmail.com"
+if "logged_in" not in st.session_state:
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
     if st.button("Login"):
-        try:
-            wb.login(email, password)
-            st.session_state.webull_session = wb
-            st.success("✅ Logged in to Webull successfully!")
-        except Exception as e:
-            st.error(f"Login failed: {e}")
+        if email == VALID_EMAIL and password:
+            st.session_state.logged_in = True
+            st.experimental_rerun()
+        else:
+            st.error("Invalid email or password")
 else:
-    wb = st.session_state.webull_session
+    st.markdown('<div class="logout-button">' + st.button("🚪 Logout", key="logout_button") * "" + '</div>', unsafe_allow_html=True)
+    if st.session_state.get("logout_button"):
+        st.session_state.clear()
+        st.experimental_rerun()
+
+    refresh_now = st.button("🔄 Refresh Now")
 
 # --- FETCH SPY PRICE ---
 def get_spy_price():
     try:
-        quote = wb.get_quote('SPY')
-        if 'lastSalePrice' in quote:
-            return quote['lastSalePrice']
-        elif 'close' in quote:
-            return quote['close']
-        else:
-            raise Exception("SPY price not found.")
+        return 604.15  # Replace with real API call later
     except Exception as e:
         st.error(f"🔴 Error fetching SPY price: {e}")
         return None
 
-# --- MOCK RSI ---
+# --- MOCK DATA PLACEHOLDERS (Replace with real sources) ---
 def calculate_rsi():
     return 62.5
 
-# --- MOCK OPTION CHAIN ---
+def get_support_resistance_levels():
+    return {'support': 600, 'resistance': 610, 'buy_zone': (602, 606)}
+
+def get_market_momentum():
+    return 'bullish'
+
 def get_option_chain():
     return pd.DataFrame({
         'type': ['Call', 'Put'],
@@ -79,29 +88,54 @@ def get_option_chain():
         'expirationDate': ['2025-06-24', '2025-06-24']
     })
 
-# --- SCORING ---
-def score_option(row, rsi, current_price):
+# --- SCORING LOGIC ---
+def score_option(row, rsi, current_price, levels, momentum):
     score = 0
     if pd.isna(row['impliedVolatility']) or row['volume'] == 0:
         return -1
     score += row['volume'] / 1000
     score += row['openInterest'] / 1000
     score += 1 / row['impliedVolatility'] * 100
-    if row['type'] == 'Call' and rsi < 70 and current_price < row['strike'] + 3:
+    if row['type'] == 'Call' and rsi < 70 and momentum == 'bullish' and current_price < row['strike'] + 3:
         score += 10
-    elif row['type'] == 'Put' and rsi > 30 and current_price > row['strike'] - 3:
+    elif row['type'] == 'Put' and rsi > 30 and momentum == 'bearish' and current_price > row['strike'] - 3:
         score += 10
+    support, resistance = levels['support'], levels['resistance']
+    if row['type'] == 'Call' and current_price > support:
+        score += 5
+    elif row['type'] == 'Put' and current_price < resistance:
+        score += 5
+    low, high = levels['buy_zone']
+    if low <= current_price <= high:
+        score += 5
     return score
 
+# --- REFRESH CONTROL ---
+current_time = time.time()
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = 0
+should_refresh = False
+if 'logged_in' in st.session_state:
+    if refresh_now:
+        should_refresh = True
+        st.session_state.last_refresh = current_time
+    elif current_time - st.session_state.last_refresh >= 60:
+        should_refresh = True
+        st.session_state.last_refresh = current_time
+
 # --- DISPLAY ---
-if 'webull_session' in st.session_state:
+if 'logged_in' in st.session_state and should_refresh:
     price = get_spy_price()
     rsi = calculate_rsi()
+    momentum = get_market_momentum()
+    levels = get_support_resistance_levels()
 
     if price:
         st.markdown(f"**📉 SPY Price**: ${price}")
     if rsi:
         st.markdown(f"**📊 RSI (14d)**: {rsi}")
+    if momentum:
+        st.markdown(f"**📈 Market Momentum**: {momentum.title()}")
 
     st.subheader("🔍 Best Option Based on Algo")
     st.markdown("---")
@@ -110,7 +144,7 @@ if 'webull_session' in st.session_state:
         options_df = get_option_chain()
         if not options_df.empty:
             options_df = options_df.dropna(subset=['lastPrice'])
-            options_df['score'] = options_df.apply(lambda row: score_option(row, rsi, price), axis=1)
+            options_df['score'] = options_df.apply(lambda row: score_option(row, rsi, price, levels, momentum), axis=1)
 
             valid_options = options_df[options_df['score'] > 0]
             if not valid_options.empty:
@@ -127,11 +161,12 @@ if 'webull_session' in st.session_state:
         else:
             st.warning("⚠️ Could not load option chain. Try again later.")
 
-# --- REFRESH TIMER ---
-while True:
-    elapsed = int(time.time() - start_time)
-    remaining = st_autorefresh_interval - (elapsed % st_autorefresh_interval)
-    countdown.markdown(f"⏳ Auto-refresh in: **{remaining} seconds**")
-    time.sleep(1)
-    if remaining == 1:
-        st.experimental_rerun()
+# --- COUNTDOWN TIMER ---
+if 'logged_in' in st.session_state and not refresh_now:
+    while True:
+        elapsed = int(time.time() - start_time)
+        remaining = st_autorefresh_interval - (elapsed % st_autorefresh_interval)
+        countdown.markdown(f"⏳ Auto-refresh in: **{remaining} seconds**")
+        time.sleep(1)
+        if remaining == 1:
+            st.experimental_rerun()
