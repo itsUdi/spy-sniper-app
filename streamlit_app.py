@@ -53,7 +53,12 @@ else:
 def get_spy_price():
     try:
         quote = wb.get_quote('SPY')
-        return quote['lastSalePrice']
+        if 'lastSalePrice' in quote:
+            return quote['lastSalePrice']
+        elif 'close' in quote:
+            return quote['close']
+        else:
+            raise Exception("SPY price not found.")
     except Exception as e:
         st.error(f"🔴 Error fetching SPY price: {e}")
         return None
