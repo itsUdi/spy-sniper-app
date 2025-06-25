@@ -1,9 +1,34 @@
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
-
 from webull import paper_webull
+from streamlit_autorefresh import st_autorefresh
+from cryptography.fernet import Fernet
+import os
+import yfinance as yf
+import matplotlib.pyplot as plt
+
+# --- ENCRYPTION SETUP (Persistent) ---
+FERNET_KEY_FILE = ".fernet_key"
+
+if not os.path.exists(FERNET_KEY_FILE):
+    with open(FERNET_KEY_FILE, "wb") as f:
+        f.write(Fernet.generate_key())
+
+with open(FERNET_KEY_FILE, "rb") as f:
+    fernet = Fernet(f.read())
+
+def encrypt_string(s):
+    return fernet.encrypt(s.encode()).decode()
+
+def decrypt_string(s):
+    return fernet.decrypt(s.encode()).decode()
+
+# --- SAFE SESSION STATE INIT ---
+for key in ["logged_in", "webull_email", "webull_pass", "webull_logged_in"]:
+    if key not in st.session_state:
+        st.session_state[key] = False if "logged_in" in key else ""
 
 # --- CONFIG ---
 st.set_page_config(page_title="SPY Sniper", layout="centered")
@@ -37,7 +62,6 @@ if not is_market_open():
 
 # --- AUTO REFRESH ---
 st_autorefresh_interval = 60
-countdown = st.empty()
 start_time = time.time()
 
 # --- LOGIN ---
@@ -78,21 +102,37 @@ def get_market_momentum():
     return 'bullish'
 
 def get_option_chain():
-    return pd.DataFrame({
-        'type': ['Call', 'Put'],
-        'strike': [605, 608],
-        'lastPrice': [1.2, 1.1],
-        'volume': [40000, 35000],
-        'openInterest': [120000, 110000],
-        'impliedVolatility': [0.23, 0.27],
-        'expirationDate': ['2025-06-24', '2025-06-24']
-    })
+    try:
+        options = wb.get_options('SPY')
+        rows = []
+        for item in options:
+            for direction in ['call', 'put']:
+                if direction in item:
+                    contract = item[direction]
+                    if contract and isinstance(contract, dict):
+                        row = {
+                            'type': direction.capitalize(),
+                            'strike': float(contract.get('strikePrice', 0)),
+                            'lastPrice': float(contract.get('askList')[0].get('price', 0)) if contract.get('askList') else 0,
+                            'volume': int(contract.get('volume', 0)),
+                            'openInterest': int(contract.get('openInterest', 0)),
+                            'impliedVolatility': float(contract.get('impliedVolatility', 0)) or 1,
+                            'expirationDate': contract.get('expireDate')
+                        }
+                        rows.append(row)
+        return pd.DataFrame(rows)
+    except Exception as e:
+        st.error(f"Failed to fetch option chain: {e}")
+        return pd.DataFrame()
 
 # --- SCORING LOGIC ---
 def score_option(row, rsi, current_price, levels, momentum):
     score = 0
     if pd.isna(row['impliedVolatility']) or row['volume'] == 0:
         return -1
+    if not (current_price + 3 >= row['strike'] >= current_price + 1 or current_price - 3 <= row['strike'] <= current_price - 1):
+        return -1
+
     score += row['volume'] / 1000
     score += row['openInterest'] / 1000
     score += 1 / row['impliedVolatility'] * 100
@@ -130,7 +170,7 @@ if 'logged_in' in st.session_state and should_refresh:
     momentum = get_market_momentum()
     levels = get_support_resistance_levels()
 
-    if price:
+    if price is not None:
         st.markdown(f"**📉 SPY Price**: ${price}")
     if rsi:
         st.markdown(f"**📊 RSI (14d)**: {rsi}")
@@ -152,9 +192,10 @@ if 'logged_in' in st.session_state and should_refresh:
                 st.markdown(f"**🔹 Type**: {best_option['type']} - **Strike**: {best_option['strike']} - Exp: {best_option['expirationDate']}")
                 st.markdown(f"**💰 Last Price**: ${round(best_option['lastPrice'], 2)}")
                 st.markdown(f"**🎯 Target (10%)**: ${round(best_option['lastPrice'] * 1.10, 2)}")
-                st.markdown(f"**🛑 Stop (20%)**: ${round(best_option['lastPrice'] * 0.80, 2)}")
+                st.markdown(f"**🚑 Stop (20%)**: ${round(best_option['lastPrice'] * 0.80, 2)}")
                 st.markdown(f"**📊 Volume**: {int(best_option['volume'])} | **OI**: {int(best_option['openInterest'])}")
                 st.markdown(f"**🧠 IV (proxy for delta)**: {round(best_option['impliedVolatility'], 4)}")
+                st.info(f"📈 Strategy Insight: Chosen based on real-time volume, OI, momentum ('{momentum}'), RSI {round(rsi, 1)}, and price range alignment with support/resistance.")
                 st.success("This contract has the highest potential to hit your 10% target today.")
             else:
                 st.warning("⚠️ No safe SPY option trade found right now. Sit tight — no trash trades.")
