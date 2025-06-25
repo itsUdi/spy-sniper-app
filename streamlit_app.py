@@ -53,16 +53,23 @@ headers = {
     "osv": "i9zh",
     "platform": "web",
     "referer": "https://app.webull.com/",
-    "reqid": "7a7spxe0ql5idtb9uinv39i22mndr_05",
-    "sec-ch-ua": "\"Not A(Brand\";v=\"8\", \"Chromium\";v=\"132\", \"Google Chrome\";v=\"132\"",
+    "reqid": "test_req_id_001",
+    "sec-ch-ua": '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
     "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": "\"Windows\"",
-    "t_time": "1750813203368",
+    "sec-ch-ua-platform": '"Windows"',
+    "t_time": str(int(time.time() * 1000)),
     "tz": "America/Chicago",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
     "ver": "5.7.3",
     "x-s": "668b3816e31b1a92771cbeb5cbb5de80e8e386bf5ec68262411c7cee2aed2136",
-    "x-sv": "xodp2vg9"
+    "x-sv": "xodp2vg9",
+    "accept": "application/json",
+    "accept-language": "en-US,en;q=0.9",
+    "origin": "https://app.webull.com",
+    "sec-fetch-site": "same-site",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "connection": "keep-alive"
 }
 
 # --- FETCH SPY PRICE FROM WEBULL ---
